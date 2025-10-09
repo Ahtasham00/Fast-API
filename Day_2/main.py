@@ -3,11 +3,22 @@ from schema import UserWrite,UserRead,Login
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Users
+
 #For Password Encryption we are going to use passlib
-from passlib.context import CryptContext #Hour 1
+#Hour 1
+from passlib.context import CryptContext
 #For JWT Token Authentication we are going to use pyJWT
-import jwt  #Hour 2
+#Hour 2
+import jwt
 from datetime import datetime,timedelta
+#Hour 3
+from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
+from fastapi.security import APIKeyHeader
+jwt_token = APIKeyHeader(name="Authorization")
+
+
+
+
 secret_key="mysecretkey"
 expiry_time=30 #minutes
 Algorithm="HS256"
@@ -37,6 +48,24 @@ def  register_user(user:UserWrite,db:Session=Depends(get_db)):
     db.refresh(user_detail)
     return user_detail
 
+
+@app.get("/users/me")
+def get_me(token=Depends(jwt_token),db:Session=Depends(get_db)):
+ token = token.replace("Bearer ", "")
+ try:
+  token_data=jwt.decode(token,secret_key,algorithms=[Algorithm])
+  token_email=token_data.get("sub")
+  if token_email is None:
+   return {"error":"Invalid Token"}
+ except ExpiredSignatureError:
+    return {"error":"Token Expired"}
+ except InvalidTokenError:
+    return {"error":"Invalid Token"}
+ user_detail=db.query(Users).filter(Users.email==token_email).first()
+ return user_detail
+
+
+
 @app.get("/users/{user_id}",response_model=UserWrite)
 def get_user(user_id:int,db:Session=Depends(get_db)):
     user=db.query(Users).filter(Users.id==user_id).first()
@@ -51,3 +80,4 @@ def login(credentials:Login,db:Session=Depends(get_db)):
         return {"error":"Invalid Password"}
     access_token=get_jwt_token(data={"sub":user.email})
     return access_token
+
